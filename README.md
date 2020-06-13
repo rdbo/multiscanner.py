@@ -33,3 +33,5 @@ $ sudo python3 multiscanner.py -c -t 192.168.0.1/24
 scan 192.168.0.1 to 192.168.0.255 and 192.168.1.1 to 192.168.1.255 using CIDR and check if all the ports between 100 and 200 are opened, and having a timeout of 5 seconds and a time-to-live (TTL) of 120. Also saving the output to the file logs.txt:
 $ sudo python3 multiscanner.py -c -t 192.168.0.1/24 192.168.1.1/24 -pr -p 100 200 -w 5 -T 120 -o logs.txt
 ```
+
+![alt text](https://github.com/rdbo/multiscanner.py/blob/master/multiscanner_output.png)
