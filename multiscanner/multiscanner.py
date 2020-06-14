@@ -3,6 +3,7 @@ import argparse
 import datetime
 import time
 import netaddr
+import sys
 from scapy.all import *
 
 def usage():
@@ -17,96 +18,137 @@ def usage():
     print(f"-w (--wait)[optional]:         specify the wait time before timeout")
     print(f"-o (--output)[optional]:       specify the output file")
 
-def multiscan(targets : list, ports : list, wait : float, timetolive : int, output_file : str, is_cidr : bool, is_port_range : bool):
-    target_list = []
-    port_list = []
-    up_targets = []
-    up_ports = {}
-    delay = 0.75
+def multiscan(cidrs : list, ip_addrs : list, port_ranges : list, ports : list, timetolive : int, wait : int, output_file : str):
+
+    #Info
+
     init_str = "<< multiscanner.py by rdbo >>"
     separate_str = "--------------------"
+    delay = 0.5
 
-    #CIDR
-    if(is_cidr == True):
-        for target in targets:
-            try:
-                temp_target_list = [str(ip) for ip in netaddr.IPNetwork(target)]
-                target_list += temp_target_list
-            except:
-                print(f"[!] Error while resolving {target} as CIDR, exiting...")
-                exit(0)
-    else:
-        target_list = targets
+    print(init_str)
+    time.sleep(delay)
+    if(len(cidrs) > 0):
+        print(f"[i] CIDRs: {[cidr for cidr in cidrs]}")
+        time.sleep(delay)
+    if(len(ip_addrs) > 0):
+        print(f"[i] IP addresses: {[ip for ip in ip_addrs]}")
+        time.sleep(delay)
+    if(len(port_ranges) > 0):
+        print(f"[i] Port ranges: {[pr for pr in port_ranges]}")
+        time.sleep(delay)
+    if(len(ports) > 0):
+        print(f"[i] Ports: {[port for port in ports]}")
+        time.sleep(delay)
+    print(f"[i] TTL (time to live): {timetolive}")
+    time.sleep(delay)
+    print(f"[i] Timeout (wait): {wait}")
+    time.sleep(delay)
+    if(len(output_file) > 0):
+        print(f"[i] Output file: {output_file}")
+        time.sleep(delay)
 
-    #Port Range
-    if(is_port_range == True and len(ports) > 0):
-        port_list = [int(port) for port in range(int(ports[0]), int(ports[-1])+1)]
-    elif(len(ports) > 0):
-        port_list = [int(port) for port in ports]
+    print(separate_str)
 
+    #Variables
 
-    try:
-        print(init_str)
-        time.sleep(delay)
-        print(f"[*] Target(s): {', '.join([target for target in targets])}")
-        if(is_port_range == True and len(port_list) > 0):
-            print(f"[*] Port(s): {port_list[0]}-{port_list[-1]}")
-        elif(len(port_list) > 0):
-            print(f"[*] Port(s): {[port for port in port_list]}")
-        time.sleep(delay)
-        print(f"[*] TTL (time to live): {timetolive}")
-        time.sleep(delay)
-        print(f"[*] Max timeout: {wait}")
-        time.sleep(delay)
-        if(len(output_file) > 0):
-            print(f"[*] Output file: {output_file}")
-        time.sleep(delay)
-        print(f"[*] Is CIDR: {is_cidr}")
-        time.sleep(delay)
-        print(f"[*] Is Port Range: {is_port_range}")
-        time.sleep(delay)
-        print(separate_str)
-    except:
-        print()
-        exit(0)
+    ip_list = []
+    up_ip_list = []
+    port_list = []
+    up_port_list = {}
+    proceed_check = False
 
-    begin_scan = time.perf_counter()
-    #Scan
-    for target in target_list:
+    #Parse IP addresses
+    print("[*] Parsing IP addresses...")
+    ip_list += ip_addrs
+
+    for cidr in cidrs:
         try:
-            print(f"[*] Scanning {target}...")
-            up_ports[target] = []
-            packet = IP(dst=target, ttl=timetolive)/ICMP()
+            temp_ip_list = [str(ip) for ip in netaddr.IPNetwork(cidr)]
+            ip_list += temp_ip_list
+        except KeyboardInterrupt:
+            print()
+            print("[!] Interrupted")
+            return 0
+        except:
+            print(f"[!] Error while parsing \"{cidr}\" as CIDR")
+            proceed_check = True
+
+    print("[+] IP addresses parsed")
+
+    #Parse ports
+    print("[*] Parsing ports...")
+    port_list += [int(port) for port in ports]
+    for port in port_ranges:
+        try:
+            port_arr = str(port).split('-')
+            if(len(port_arr) >= 2):
+                for p in range(int(port_arr[0]), int(port_arr[-1]) + 1):
+                    if(p >= 0):
+                        if(p not in port_list):
+                            port_list.append(p)
+                    else:
+                        print(f"[!] Invalid port: \"{p}\"")
+            else:
+                print(f"[!] Invalid port range string \"{port}\". Try: port1-port2.")
+                proceed_check = True
+        except KeyboardInterrupt:
+            print()
+            print("[!] Interrupted")
+            return 0
+        except:
+            print(f"[!] Error while parsing \"{port}\" as a port range")
+            proceed_check = True
+
+    print("[+] Ports parsed")
+
+    #Proceed check
+    if(proceed_check == True):
+        check = input("[#] Errors were found before the start of the scan. Proceed? (y/n): ")
+        if(check == 'n' or check == 'N'):
+            return 0
+
+    #Scan
+    print("[*] Scanning...")
+    begin_scan = time.perf_counter()
+
+    for ip in ip_list:
+        try:
+            print(f"[*] Scanning {ip}...")
+            up_port_list[ip] = []
+            packet = IP(dst=ip, ttl=timetolive)/ICMP()
             reply = sr1(packet, timeout=wait, verbose=False)
             if(reply is not None):
-                print(f"[*] {target} is up")
-                up_targets.append(target)
+                print(f"[i] {ip} is up")
+                up_ip_list.append(ip)
                 for port in port_list:
-                    print(f"[*] Scanning {target}:{port}...")
+                    print(f"[*] Scanning {ip}:{port}...")
                     socket.setdefaulttimeout(wait)
                     soc = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                    reply = soc.connect_ex((target, port))
+                    reply = soc.connect_ex((ip, port))
                     if(reply == 0):
-                        print(f"[*] {target}:{port} is up")
-                        up_ports[target].append(port)
+                        print(f"[i] {ip}:{port} is up")
+                        up_port_list[ip].append(port)
             else:
-                print(f"[*] {target} is down")
-            print(separate_str)
+                print(f"[i] {ip} is down")
         except KeyboardInterrupt:
+            print()
             print("[!] Interrupted")
             break
         except:
-            print(f"[!] Exception while scanning {target}")
+            print(f"[!] Exception raised while scanning {ip}")
+            print(f"[!] {sys.exc_info()[0]}")
+        print(separate_str)
 
     end_scan = time.perf_counter()
-    print("[*] Scan finished")
-    scan_time = round(end_scan - begin_scan,2)
+    print("[+] Scan finished")
+    scan_time = round(end_scan - begin_scan, 2)
 
+    #Write to output file
     begin_write = time.perf_counter()
-    #Write to file
     if(len(output_file) > 0):
         try:
-            print(f"[*] Writing to file: {output_file}")
+            print(f"[*] Writing output to: {output_file}")
             file = open(output_file, "a")
             file.write("\n")
             file.write(separate_str + "\n")
@@ -114,70 +156,81 @@ def multiscan(targets : list, ports : list, wait : float, timetolive : int, outp
             file.write(f"[ {'{date:%Y/%m/%d - %H:%M:%S}'.format(date=datetime.now())} ]\n")
             file.write("\n")
             file.write(f"[*] Scan info \n")
-            file.write(f"Target(s): {', '.join([target for target in targets])} \n")
-            if(is_port_range == True and len(port_list) > 0):
-                file.write(f"Port(s): {port_list[0]}-{port_list[-1]}\n")
-            elif(len(port_list) > 0):
-                file.write(f"Port(s): {[port for port in port_list]}\n")
-            else:
-                file.write(f"Port(s): None\n")
-            file.write(f"Max timeout: {wait}\n")
-            file.write(f"TTL (time to live): {timetolive}\n")
-            file.write(f"CIDR Enabled: {str(is_cidr)}\n")
-            file.write(f"Port Range Enabled: {str(is_port_range)}\n")
+            file.write(f"[i] Target(s): [{', '.join([ip for ip in ip_addrs] + [cidr for cidr in cidrs])}]\n")
+            if(len(ports) + len(port_ranges) > 0):
+                file.write(f"[i] Port(s): [{', '.join([port for port in ports] + [pr for pr in port_ranges])}]\n")
+            file.write(f"[i] TTL (time to live): {timetolive}\n")
+            file.write(f"[i] Timeout (wait): {wait}\n")
             file.write("\n")
             file.write("[*] Results\n")
 
-            for target in target_list:
-                if(target in up_targets):
-                    if(len(ports) == 0 or len(up_ports[target]) == 0):
-                        file.write(f"{target} : up\n")
+            for ip in ip_list:
+                if(ip in up_ip_list):
+                    if(len(up_port_list) == 0 or len(up_port_list[ip]) == 0):
+                        file.write(f"{ip}: up\n")
                     else:
-                        file.write(f"{target} : [")
-                        file.write(', '.join([str(port) for port in up_ports[target]]))
+                        file.write(f"{ip} : [")
+                        file.write(", ".join([str(port) for port in up_port_list[ip]]))
                         file.write(f"]\n")
                 else:
-                    file.write(f"{target} : down\n")
-            print("[*] Writing finished")
+                    file.write(f"{ip} : down")
+            
+            print("[+] Finished writing")
+        except KeyboardInterrupt:
+            print("[!] Interrupted")
         except:
-            print(f"[!] Exception while writing to {output_file}")
+            print(f"[!] Exception while writing to file")
+    
     end_write = time.perf_counter()
     write_time = round(end_write - begin_write, 2)
 
     print(separate_str)
     print("[*] Status")
-    print(f"[*] Finished scan in {scan_time} second(s)")
+    print(f"[i] Finished scan in {scan_time} second(s)")
     if(len(output_file) > 0):
-        print(f"[*] Finished writing in {write_time} second(s)")
-        print(f"[*] Saved results to {output_file}")
+        print(f"[i] Finished writing in {write_time} second(s)")
+        print(f"[i] Saved results to {output_file}")
 
     print(separate_str)
 
 if (__name__ == "__main__"):
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument("-h", "--help", action="store_true", dest="help", default="False")
-    parser.add_argument("-c", "--cidr", action="store_true", dest="is_cidr", default="False")
-    parser.add_argument("-t", "--targets", type=str, nargs="+", action="store", dest="targets", default="")
-    parser.add_argument("-o", "--output", type=str, action="store", dest="output", default="")
-    parser.add_argument("-pr", "--port-range", action="store_true", dest="is_port_range", default="False")
-    parser.add_argument("-p", "--ports", type=str, nargs="+", action="store", dest="ports", default="")
-    parser.add_argument("-T", "--ttl", type=int, action="store", dest="ttl", default="64")
+    parser.add_argument("-c", "--cidrs", type=str, nargs="+", action="store", dest="cidrs", default="")
+    parser.add_argument("-i", "--ip", type=str, nargs="+", action="store", dest="ips", default="")
+    parser.add_argument("-r", "--port-ranges", type=str, nargs="+", action="store", dest="port_ranges", default="")
+    parser.add_argument("-p", "--port", type=str, nargs="+", action="store", dest="ports", default="")
+    parser.add_argument("-t", "--ttl", type=int, action="store", dest="ttl", default="64")
     parser.add_argument("-w", "--wait", type=float, action="store", dest="wait", default="1")
+    parser.add_argument("-o", "--output", type=str, action="store", dest="output", default="")
     args = parser.parse_args()
+
     try:
-        help_param = args.help
-        target_list = args.targets
-        port_list = args.ports
-        wait = args.wait
-        output = args.output
-        ttl = args.ttl
-        is_cidr = args.is_cidr
-        is_port_range = args.is_port_range
+        var_help = args.help
+        var_cidrs = args.cidrs
+        var_ip_addrs = args.ips
+        var_output = args.output
+        var_port_ranges = args.port_ranges
+        var_ports = args.ports
+        var_ttl = args.ttl
+        var_wait = args.wait
     except:
+        print("[!] Unable to parse arguments")
         usage()
         exit(0)
 
-    if(help_param == True or len(target_list) == 0 or wait < 0 or ttl < 0 or (is_port_range == True and len(port_list) != 2)):
+    if(var_help == True or len(var_cidrs) + len(var_ip_addrs) < 1 or var_ttl < 1 or var_wait < 0):
         usage()
         exit(0)
-    multiscan(target_list, port_list, wait, ttl, output, is_cidr, is_port_range)
+    
+    try:
+        multiscan(var_cidrs, var_ip_addrs, var_port_ranges, var_ports, var_ttl, var_wait, var_output)
+    except KeyboardInterrupt:
+        print()
+        print("[!] Interrupted")
+        exit(0)
+    except SystemExit:
+        exit(0)
+    except:
+        print("[!] Exception raised, exiting...")
+        exit(0)
