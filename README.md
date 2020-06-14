@@ -12,6 +12,7 @@ sudo python3 multiscanner.py <arguments>
 -w (--wait)[optional]:         specify the wait time before timeout
 -o (--output)[optional]:       specify the output file```
 ```
+```
 Examples:
 check if website_test.domain is up:
 $ sudo python3 multiscanner.py -i website_test.domain
