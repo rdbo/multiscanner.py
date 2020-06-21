@@ -173,7 +173,7 @@ def multiscan(cidrs : list, ip_addrs : list, port_ranges : list, ports : list, t
                         file.write(", ".join([str(port) for port in up_port_list[ip]]))
                         file.write(f"]\n")
                 else:
-                    file.write(f"{ip} : down")
+                    file.write(f"{ip} : down\n")
             
             print("[+] Finished writing")
         except KeyboardInterrupt:
