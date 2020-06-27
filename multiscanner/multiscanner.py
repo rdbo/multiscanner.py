@@ -169,7 +169,7 @@ def multiscan(cidrs : list, ip_addrs : list, port_ranges : list, ports : list, t
                     if(len(up_port_list) == 0 or len(up_port_list[ip]) == 0):
                         file.write(f"{ip}: up\n")
                     else:
-                        file.write(f"{ip} : [")
+                        file.write(f"{ip} : up, [")
                         file.write(", ".join([str(port) for port in up_port_list[ip]]))
                         file.write(f"]\n")
                 else:
